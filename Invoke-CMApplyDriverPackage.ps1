@@ -197,6 +197,7 @@
 	4.1.1 - (2021-03-17) - Fixed issue with driver package detection logic where null value could cause a matched entry
 	4.1.2 - (2021-05-14) - Fixed bug for Driver Update process on 20H2
 	4.1.3 - (2021-05-28) - Added support for Windows 10 21H1
+	4.1.x - (2021-06-11) - Fixed an issue where the WIM for compressed drivers packages was not deleted after decompression (@brycesteel)
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "BareMetal")]
 param(
@@ -2021,16 +2022,59 @@ Process {
 					}
 					
 					try {
-						# Expand compressed driver package WIM file
+						# Mount compressed driver package WIM file
 						Write-CMLogEntry -Value " - Attempting to mount driver package content WIM file: $($DriverPackageCompressedFile.Name)" -Severity 1
 						Write-CMLogEntry -Value " - Mount location: $($DriverPackageMountLocation)" -Severity 1
 						Mount-WindowsImage -ImagePath $DriverPackageCompressedFile.FullName -Path $DriverPackageMountLocation -Index 1 -ErrorAction Stop
 						Write-CMLogEntry -Value " - Successfully mounted driver package content WIM file" -Severity 1
-						Write-CMLogEntry -Value " - Copying items from mount directory" -Severity 1
-						Get-ChildItem -Path $DriverPackageMountLocation | Copy-Item -destination $ContentLocation -Recurse -container
 					}
 					catch [System.Exception] {
 						Write-CMLogEntry -Value " - Failed to mount driver package content WIM file. Error message: $($_.Exception.Message)" -Severity 3
+						
+						# Throw terminating error
+						$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+						$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+					}
+
+					try {
+						# Expand compressed driver package WIM file by copying contents out of mounted WIM file
+						Write-CMLogEntry -Value " - Attemping to copy items out of mounted driver package content WIM file" -Severity 1
+						Get-ChildItem -Path $DriverPackageMountLocation -ErrorAction Stop | Copy-Item -Destination $ContentLocation -Recurse -Container -ErrorAction Stop
+						Write-CMLogEntry -Value " - Successfully copied items out of mounted driver package content WIM file" -Severity 1
+					}
+					catch [System.Exception] {
+						Write-CMLogEntry -Value " - Failed to copy items out of mounted driver package content WIM file. Error message: $($_.Exception.Message)" -Severity 3
+						
+						# Throw terminating error
+						$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+						$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+					} finally {
+						try {
+							# Attempt to dismount compressed driver package content WIM file
+							Write-CMLogEntry -Value " - Attempting to dismount driver package content WIM file: $($DriverPackageCompressedFile.Name)" -Severity 1
+							Write-CMLogEntry -Value " - Mount location: $($DriverPackageMountLocation)" -Severity 1
+							Dismount-WindowsImage -Path $DriverPackageMountLocation -Discard -ErrorAction Stop
+							Write-CMLogEntry -Value " - Successfully dismounted driver package content WIM file" -Severity 1
+						}
+						catch [System.Exception] {
+							Write-CMLogEntry -Value " - Failed to dismount driver package content WIM file. Error message: $($_.Exception.Message)" -Severity 3
+							
+							# Throw terminating error
+							$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+							$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+						}
+					}
+
+					try {
+						# Attempt to remove compressed driver package archive file
+						if (Test-Path -Path $DriverPackageCompressedFile.FullName) {
+							Write-CMLogEntry -Value " - Attempting to remove compressed driver package content WIM file: $($DriverPackageCompressedFile.Name)" -Severity 1
+							Remove-Item -Path $DriverPackageCompressedFile.FullName -Force -ErrorAction Stop
+							Write-CMLogEntry -Value " - Successfully removed compressed driver package content WIM file" -Severity 1
+						}
+					}
+					catch [System.Exception] {
+						Write-CMLogEntry -Value " - Failed to remove compressed driver package content file after decompression. Error message: $($_.Exception.Message)" -Severity 3
 						
 						# Throw terminating error
 						$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
@@ -2118,28 +2162,6 @@ Process {
 			"PreCache" {
 				# Driver package content downloaded successfully, log output and exit script
 				Write-CMLogEntry -Value " - Driver package content successfully downloaded and pre-cached to: $($ContentLocation)" -Severity 1
-			}
-		}
-		
-		# Cleanup potential compressed driver package content
-		if ($DriverPackageCompressedFile -ne $null) {
-			switch -wildcard ($DriverPackageCompressedFile.Name) {
-				"*.wim" {
-					try {
-						# Attempt to dismount compressed driver package content WIM file
-						Write-CMLogEntry -Value " - Attempting to dismount driver package content WIM file: $($DriverPackageCompressedFile.Name)" -Severity 1
-						Write-CMLogEntry -Value " - Mount location: $($DriverPackageMountLocation)" -Severity 1
-						Dismount-WindowsImage -Path $DriverPackageMountLocation -Discard -ErrorAction Stop
-						Write-CMLogEntry -Value " - Successfully dismounted driver package content WIM file" -Severity 1
-					}
-					catch [System.Exception] {
-						Write-CMLogEntry -Value " - Failed to dismount driver package content WIM file. Error message: $($_.Exception.Message)" -Severity 3
-						
-						# Throw terminating error
-						$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
-						$PSCmdlet.ThrowTerminatingError($ErrorRecord)
-					}
-				}
 			}
 		}
 	}
