@@ -197,6 +197,7 @@
 	4.1.1 - (2021-03-17) - Fixed issue with driver package detection logic where null value could cause a matched entry
 	4.1.2 - (2021-05-14) - Fixed bug for Driver Update process on 20H2
 	4.1.3 - (2021-05-28) - Added support for Windows 10 21H1
+	4.1.x - (2021-06-16) - Fixed XMLDeploymentType parameter ValidateSet to use "OSUpgrade" instead of "OSUpdate" (so that allowed $XMLDeploymentType values are a subset of possible $Script:PSCmdlet.ParameterSetName values and therefore do not cause problems when assigned to $Script:DeploymentMode)
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "BareMetal")]
 param(
@@ -228,7 +229,7 @@ param(
 	
 	[parameter(Mandatory = $false, ParameterSetName = "XMLPackage", HelpMessage = "Specify the deployment type mode for XML based driver package deployments, e.g. 'BareMetal', 'OSUpdate', 'DriverUpdate', 'PreCache'.")]
 	[ValidateNotNullOrEmpty()]
-	[ValidateSet("BareMetal", "OSUpdate", "DriverUpdate", "PreCache")]
+	[ValidateSet("BareMetal", "OSUpgrade", "DriverUpdate", "PreCache")]
 	[string]$XMLDeploymentType = "BareMetal",
 	
 	[parameter(Mandatory = $true, ParameterSetName = "Debug", HelpMessage = "Specify the service account user name used for authenticating against the AdminService endpoint.")]
