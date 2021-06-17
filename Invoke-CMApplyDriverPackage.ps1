@@ -197,6 +197,7 @@
 	4.1.1 - (2021-03-17) - Fixed issue with driver package detection logic where null value could cause a matched entry
 	4.1.2 - (2021-05-14) - Fixed bug for Driver Update process on 20H2
 	4.1.3 - (2021-05-28) - Added support for Windows 10 21H1
+	4.1.x - (2021-06-16) - Fixed bugs where all New-TerminatingErrorRecord calls were failing because of passing an empty string as the message; all calls now use a non-empty message string (the same as the existing CMLog message in most cases)
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "BareMetal")]
 param(
@@ -1012,8 +1013,8 @@ Process {
 			}
 			default {
 				$ErrorMessage = "Unable to translate OS version using input object: $($InputObject)"
-				Write-CMLogEntry -Value " - Unable to translate OS version using input object: $($InputObject)" -Severity 3
 				Write-CMLogEntry -Value " - $ErrorMessage" -Severity 3
+				Write-CMLogEntry -Value " - Unsupported OS version detected, please reach out to the developers of this script" -Severity 3
 				
 				# Throw terminating error
 				$ErrorRecord = New-TerminatingErrorRecord -Message $ErrorMessage
